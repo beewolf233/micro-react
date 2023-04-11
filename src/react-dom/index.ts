@@ -1,19 +1,17 @@
-import type { VDOMProps } from '../shared';
+import type { VDOMProps, FiberProps, Element } from '../shared';
 
-function render(vDom: VDOMProps , container:  HTMLElement | Text) {
+function createDom(fiber: FiberProps): Element {
   const dom =
-    vDom.type === "TEXT_ELEMENT"
+    fiber.type === "TEXT_ELEMENT"
       ? document.createTextNode("")
-      : document.createElement(vDom.type)
+      : document.createElement(fiber.type)
 
-  const isProperty = (key: string) => key !== "children"
-
-  Object.keys(vDom.props)
+      const isProperty = (key: string) => key !== "children"
+  Object.keys(fiber.props)
     .filter(isProperty)
     .forEach(name => {
-      // css属性
       if (name === 'style') {
-        let styleObj = vDom.props[name];
+        let styleObj = fiber.props[name];
         for (let attr in styleObj) {
            // @ts-ignore 
           (dom as HTMLElement).style[attr] = styleObj[attr];
@@ -21,17 +19,92 @@ function render(vDom: VDOMProps , container:  HTMLElement | Text) {
         return
       }
       // @ts-ignore
-      dom[name] = vDom.props[name]
+      dom[name] = fiber.props[name]
     })
 
-  const children = vDom.props.children;
-
-  children.forEach(child =>
-    render(child, dom)
-  )
-
-  container.appendChild(dom)
+  return dom
 }
+
+/**
+ * 初始化第一个fiber节点
+ * */ 
+function render(vDom: VDOMProps , container: Element) {
+  nextUnitOfWork = {
+    dom: container,
+    props: {
+      children: [vDom],
+    },
+  } as FiberProps
+}
+
+// 下一个工作节点
+let nextUnitOfWork = null as FiberProps | null | undefined;
+
+function workLoop(deadline: any) {
+  let shouldYield = false
+  while (nextUnitOfWork && !shouldYield) {
+    nextUnitOfWork = performUnitOfWork(
+      nextUnitOfWork
+    )
+    shouldYield = deadline.timeRemaining() < 1
+  }
+  requestIdleCallback(workLoop)
+}
+
+requestIdleCallback(workLoop)
+
+function performUnitOfWork(fiber: FiberProps): FiberProps | null | undefined {
+  // 生成dom
+  if (!fiber.dom) {
+    fiber.dom = createDom(fiber)
+  }
+
+  if (fiber.parent?.dom) {
+    fiber.parent.dom.appendChild(fiber.dom)
+  }
+  // 生成fiber
+  const elements = fiber.props.children
+  let index = 0
+  let prevSibling = null
+
+  while (index < elements.length) {
+    const element = elements[index]
+
+    const newFiber = {
+      type: element.type,
+      props: element.props,
+      parent: fiber,
+      dom: null,
+    }
+
+    if (index === 0) {
+      fiber.child = newFiber
+    } else {
+      if (prevSibling) {
+        (prevSibling as FiberProps).sibling = newFiber
+      }
+    }
+
+    prevSibling = newFiber
+    index++
+  }
+  // 如果有子节点工作格， 返回子工作格
+  if (fiber.child) {
+    return fiber.child
+  }
+  let nextFiber = fiber
+
+  while (nextFiber) {
+    // 如果有兄弟节点  返回相邻兄弟工作格
+    if (nextFiber.sibling) {
+      return nextFiber.sibling
+    }
+    // 如果没有 返回上一级
+    nextFiber = nextFiber.parent as FiberProps;
+  }
+
+}
+
 
 const ReactDOM = {
   render
