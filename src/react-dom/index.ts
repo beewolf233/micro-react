@@ -29,16 +29,40 @@ function createDom(fiber: FiberProps): Element {
  * 初始化第一个fiber节点
  * */ 
 function render(vDom: VDOMProps , container: Element) {
-  nextUnitOfWork = {
+  wipRoot = {
     dom: container,
     props: {
       children: [vDom],
     },
   } as FiberProps
+  nextUnitOfWork = wipRoot
 }
+
+// 生成节点
+function commitRoot() {
+  commitWork(wipRoot!.child)
+  // 生成结束后 初始化 wipRoot
+  wipRoot = null
+}
+
+function commitWork(fiber: FiberProps | null | undefined) {
+  if (!fiber) {
+    return
+  }
+  const domParent = fiber.parent!.dom;
+  // 更新dom节点
+  domParent && domParent.appendChild(fiber.dom as Element)
+  // 先遍历子工作格
+  commitWork(fiber.child)
+  // 再遍历兄弟工作格
+  commitWork(fiber.sibling)
+}
+
 
 // 下一个工作节点
 let nextUnitOfWork = null as FiberProps | null | undefined;
+// work in progress root
+let wipRoot = null as FiberProps | null | undefined;
 
 function workLoop(deadline: any) {
   let shouldYield = false
@@ -47,6 +71,10 @@ function workLoop(deadline: any) {
       nextUnitOfWork
     )
     shouldYield = deadline.timeRemaining() < 1
+  }
+
+  if (!nextUnitOfWork && wipRoot) {
+    commitRoot()
   }
   requestIdleCallback(workLoop)
 }
@@ -59,9 +87,9 @@ function performUnitOfWork(fiber: FiberProps): FiberProps | null | undefined {
     fiber.dom = createDom(fiber)
   }
 
-  if (fiber.parent?.dom) {
-    fiber.parent.dom.appendChild(fiber.dom)
-  }
+  // if (fiber.parent?.dom) {
+  //   fiber.parent.dom.appendChild(fiber.dom)
+  // }
   // 生成fiber
   const elements = fiber.props.children
   let index = 0
