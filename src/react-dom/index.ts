@@ -113,7 +113,6 @@ function commitWork(fiber: FiberBlock) {
     return
   }
   // const domParent = fiber.parent!.dom;
-  // 因为如果是 函数组建 parent 没办法直接获取到 要通过递归获取到父节点DOM
   let domParentFiber = fiber.parent
   while (!domParentFiber?.dom) {
     domParentFiber = domParentFiber?.parent
@@ -206,9 +205,14 @@ function performUnitOfWork(fiber: FiberProps): FiberProps | null | undefined {
 
 }
 
-
+// 正在执行的fiber
+let wipFiber = null as FiberBlock;
+let hookIndex = null as number | null;
 
 function updateFunctionComponent(fiber: FiberProps) {
+  wipFiber = fiber
+  hookIndex = 0
+  wipFiber.hooks = []
   const children = [(fiber.type as Function)(fiber.props)]
   reconcileChildren(fiber, children)
 }
@@ -220,6 +224,42 @@ function updateHostComponent(fiber: FiberProps) {
   // 生成fiber
   const elements = fiber.props.children;
   reconcileChildren(fiber, elements)
+}
+
+// hooks
+export function useState<T>(initial: T) {
+  // 检查是否有旧的hooks
+  const oldHook =
+    wipFiber!.alternate &&
+    wipFiber!.alternate.hooks &&
+    wipFiber!.alternate.hooks[hookIndex as number]
+  // 如果有旧的，就复制到新的，如果没有初始化
+  const hook = {
+    state: oldHook ? oldHook.state : initial,
+    queue: [],
+  }
+
+  const actions = oldHook ? oldHook.queue : []
+
+  actions.forEach(action => {
+    hook.state = action(hook.state)
+  })
+
+  const setState = (action: Function) => {
+    // @ts-ignore
+    hook.queue.push(action)
+    wipRoot = {
+      dom: currentRoot!.dom,
+      props: currentRoot!.props,
+      alternate: currentRoot!,
+    } as FiberProps
+    nextUnitOfWork = wipRoot
+    deletions = []
+  }
+  // @ts-ignore
+  wipFiber!.hooks.push(hook)
+  hookIndex = hookIndex as number + 1;
+  return [hook.state, setState]
 }
 
 /** 

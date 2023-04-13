@@ -1,20 +1,21 @@
 import React from './react';
-import ReactDOM from './react-dom';
+import ReactDOM, { useState } from './react-dom';
 
-type AppProps = {
-  name: string;
-}
 /** @jsxRuntime classic */
-function App(props: AppProps) {
+function Counter() {
+  const [state, setState] = useState<number>(1);
   return (
-    <div style={{background: 'salmon'}}>
-      <h1>Hi {props.name}</h1>
-      <h2 style={{textAlign: 'right' }}>from Didact</h2>
-  </div>
+    <h1 onClick={() => setState((c: number) => c + 1)}>
+      Count: {state}
+    </h1>
   )
 }
-/** @jsxRuntime classic */
-const element = <App name="world" />
+const element = (
+  <div>
+    container
+    <Counter />
+  </div>
+)
 
 const container = document.getElementById("root") as HTMLElement;
 ReactDOM.render(element, container);
