@@ -29,5 +29,9 @@ export type FiberProps = VDOMProps & {
   /** 属性 */
   props: Omit<VDOMProps, 'children'> & {
     children: FiberProps[]
-  }
+  },
+  /** 前工作格流 用于对比 相当于 前一个fiber 进行diff比较 */
+  alternate: FiberProps | null;
+  /** 副作用 标签 */
+  effectTag: 'UPDATE' | 'PLACEMENT' | 'DELETION'
 }
