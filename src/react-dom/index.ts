@@ -1,10 +1,12 @@
 import type { VDOMProps, FiberProps, Element } from '../shared';
 
+type FiberBlock =  FiberProps | null | undefined;
+
 function createDom(fiber: FiberProps): Element {
   const dom =
     fiber.type === "TEXT_ELEMENT"
       ? document.createTextNode("")
-      : document.createElement(fiber.type)
+      : document.createElement(fiber.type as string)
 
   updateDom(dom, {} as FiberProps['props'], fiber.props)
 
@@ -42,7 +44,6 @@ function updateDom(dom: Element, prevProps: FiberProps['props'], nextProps: Fibe
     .filter(isProperty)
     .filter(isGone(prevProps, nextProps))
     .forEach(name => {
-
        // @ts-ignore
       dom[name] = ""
     })
@@ -107,11 +108,18 @@ function commitRoot() {
   wipRoot = null
 }
 
-function commitWork(fiber: FiberProps | null | undefined) {
+function commitWork(fiber: FiberBlock) {
   if (!fiber) {
     return
   }
-  const domParent = fiber.parent!.dom;
+  // const domParent = fiber.parent!.dom;
+  // 因为如果是 函数组建 parent 没办法直接获取到 要通过递归获取到父节点DOM
+  let domParentFiber = fiber.parent
+  while (!domParentFiber?.dom) {
+    domParentFiber = domParentFiber?.parent
+  }
+  const domParent = domParentFiber.dom
+  
   if (
     fiber.effectTag === "PLACEMENT" &&
     fiber.dom != null
@@ -130,7 +138,8 @@ function commitWork(fiber: FiberProps | null | undefined) {
     )
   } else if (fiber.effectTag === "DELETION") {
     // 删除dom节点
-    domParent!.removeChild(fiber.dom as Element)
+    commitDeletion(fiber, domParent)
+    // domParent!.removeChild(fiber.dom as Element)
   }
   // 先遍历子工作格
   commitWork(fiber.child)
@@ -139,12 +148,20 @@ function commitWork(fiber: FiberProps | null | undefined) {
 }
 
 
+function commitDeletion(fiber: FiberProps, domParent: Element) {
+  if (fiber.dom) {
+    domParent.removeChild(fiber.dom)
+  } else {
+    commitDeletion(fiber.child as FiberProps, domParent)
+  }
+}
+
 // 下一个工作节点
-let nextUnitOfWork = null as FiberProps | null | undefined;
+let nextUnitOfWork = null as FiberBlock;
 // work in progress root 正在工作的fiber树
-let wipRoot = null as FiberProps | null | undefined;
+let wipRoot = null as FiberBlock;
 // 当前fiber树
-let currentRoot = null as FiberProps | null | undefined;
+let currentRoot = null as FiberBlock;
 // 要删除的节点
 let deletions = [] as FiberProps[]
 
@@ -166,14 +183,12 @@ function workLoop(deadline: any) {
 requestIdleCallback(workLoop)
 
 function performUnitOfWork(fiber: FiberProps): FiberProps | null | undefined {
-  // 生成dom
-  if (!fiber.dom) {
-    fiber.dom = createDom(fiber)
+  const isFunctionComponent = fiber.type instanceof Function
+  if (isFunctionComponent) {
+    updateFunctionComponent(fiber)
+  } else {
+    updateHostComponent(fiber)
   }
-
-  // 生成fiber
-  const elements = fiber.props.children;
-  reconcileChildren(fiber, elements)
   // 如果有子节点工作格， 返回子工作格
   if (fiber.child) {
     return fiber.child
@@ -189,6 +204,22 @@ function performUnitOfWork(fiber: FiberProps): FiberProps | null | undefined {
     nextFiber = nextFiber.parent as FiberProps;
   }
 
+}
+
+
+
+function updateFunctionComponent(fiber: FiberProps) {
+  const children = [(fiber.type as Function)(fiber.props)]
+  reconcileChildren(fiber, children)
+}
+
+function updateHostComponent(fiber: FiberProps) {
+  if (!fiber.dom) {
+    fiber.dom = createDom(fiber)
+  }
+  // 生成fiber
+  const elements = fiber.props.children;
+  reconcileChildren(fiber, elements)
 }
 
 /** 
@@ -212,7 +243,7 @@ function reconcileChildren(wipFiber: FiberProps, elements: FiberProps[]) {
       element &&
       element.type === oldFiber.type
     if (sameType) {
-      // TODO update the node
+      // update the node
       newFiber = {
         type: oldFiber!.type,
         props: element.props,
@@ -223,7 +254,7 @@ function reconcileChildren(wipFiber: FiberProps, elements: FiberProps[]) {
       }
     }
     if (element && !sameType) {
-      // TODO add this node
+      // add this node
       newFiber = {
         type: element.type,
         props: element.props,
@@ -234,7 +265,7 @@ function reconcileChildren(wipFiber: FiberProps, elements: FiberProps[]) {
       }
     }
     if (oldFiber && !sameType) {
-      // TODO delete the oldFiber's node
+      // delete the oldFiber's node
       oldFiber.effectTag = "DELETION"
       deletions.push(oldFiber)
     }

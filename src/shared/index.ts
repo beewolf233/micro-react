@@ -2,7 +2,7 @@ export type Element = HTMLElement | Text;
 // 虚拟元素类型
 export type VDOMProps = {
   /** 便签类型 */
-  type: string;
+  type: string | Function;
   /** 属性 */
   props: {
     /** css属性 */ 
